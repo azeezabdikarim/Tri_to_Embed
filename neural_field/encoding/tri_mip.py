@@ -52,6 +52,21 @@ class TriMipEncoding(nn.Module):
             level = torch.broadcast_to(
                 level, decomposed_x.shape[:3]
             ).contiguous()
+
+        # azeez add
+        MAX_TEXELS = 6_500_000  # 6.5 M → ceil/32 == 203 125 < 65 535  (safe)
+        if decomposed_x.shape[1] > MAX_TEXELS:  # <<< NEW
+            enc_chunks = []                      # <<< NEW
+            for start in range(0, decomposed_x.shape[1], MAX_TEXELS):  # <<< NEW
+                end = min(start + MAX_TEXELS, decomposed_x.shape[1])   # <<< NEW
+                enc_chunks.append(
+                    self.forward(
+                        x[start:end],
+                        None if level is None else level[start:end],
+                    )
+                )
+            return torch.cat(enc_chunks, dim=0)
+
         enc = nvdiffrast.torch.texture(
             self.fm,
             decomposed_x,

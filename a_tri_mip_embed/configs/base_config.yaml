@@ -1,0 +1,38 @@
+# Base configuration for Week 1 experiments
+experiment_name: "week1_rotation_classification"
+seed: 42
+
+# Data settings
+data:
+  data_root: "/home/azeez/Documents/Tri-MipRF/output/2025-05-13_12-59-05"  # Update this
+  batch_size: 8
+  num_workers: 2
+  shuffle: true
+  
+# Model settings
+model:
+  encoder_type: "resnet18"  # Options: resnet18, resnet34, efficientnet
+  embedding_dim: 256
+  plane_fusion: "concat"  # Options: concat, sum, attention
+  pair_combination: "subtract"  # Options: subtract, concat, both
+  
+# Training settings
+training:
+  num_epochs: 100
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  lr_scheduler:
+    type: "cosine"
+    warmup_epochs: 5
+  
+# Logging settings
+logging:
+  log_dir: "logs"
+  save_freq: 50  # Save checkpoint every N epochs
+  log_freq: 5  # Log metrics every N steps
+  
+# Evaluation settings
+evaluation:
+  eval_freq: 5  # Evaluate every N epochs
+  save_embeddings: true
+  save_confusion_matrix: true

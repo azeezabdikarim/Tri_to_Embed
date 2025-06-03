@@ -130,6 +130,9 @@ class RayDataset(Dataset):
                 render_bkgd = (torch.randn_like(rgb[..., :3]) + 0.5).clamp(
                     0.0, 1.0
                 )
+            elif 'black' == self.render_bkgd:
+                # black background = zero RGB
+                render_bkgd = torch.zeros_like(rgb[..., :3])
             else:
                 raise NotImplementedError
 
@@ -152,8 +155,16 @@ class RayDataset(Dataset):
             c2w = self.poses[cam_idx][idx]
             cam_rays = self.ray_bundles[cam_idx][sample_y, sample_x]
             loss_multi = self.loss_multi[cam_idx][idx, None]
-            render_bkgd = torch.ones_like(rgb[..., [-1]])
-
+            if 'white' == self.render_bkgd:
+                render_bkgd = torch.ones_like(rgb[..., [-1]])
+            elif 'rand' == self.render_bkgd:
+                render_bkgd = torch.rand_like(rgb[..., :3])
+            elif 'randn' == self.render_bkgd:
+                render_bkgd = (torch.randn_like(rgb[..., :3]) + 0.5).clamp(0.0, 1.0)
+            elif 'black' == self.render_bkgd:
+                render_bkgd = torch.zeros_like(rgb[..., :3])
+            else:
+                raise NotImplementedError
         if self.to_world:
             cam_rays.directions = (
                 c2w[:, :3, :3] @ cam_rays.directions[..., None]

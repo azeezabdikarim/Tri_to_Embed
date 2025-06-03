@@ -89,6 +89,11 @@ class TriMipRF(nn.Module):
         }
 
     def query_rgb(self, dir, embedding):
+        if embedding.numel() == 0:
+            out_shape = list(embedding.shape[:-1]) + [3]
+            empty_rgb = embedding.new_empty(*out_shape)
+            return {"rgb": empty_rgb}
+
         # dir in [-1,1]
         dir = (dir + 1.0) / 2.0  # SH encoding must be in the range [0, 1]
         d = self.direction_encoding(dir.view(-1, dir.shape[-1]))

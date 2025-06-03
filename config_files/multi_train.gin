@@ -1,0 +1,35 @@
+# config/multi_train.gin  – minimal but complete
+# -------------------------------------------------------
+
+# ------- main() parameters ----------
+#main.input_dir      = "/home/azeez/Documents/Objaverse-to-NeRF/nerf_training_images_datasets/rotation/favs"
+main.input_dir = "/media/azeez/azeez_3t/validated_data/passed_validation/"
+main.output_dir     = "output"
+main.scene_type     = "nerf_synthetic"
+main.train_split    = "trainval"
+main.model_name     = "Tri-MipRF"
+
+main.iters          = 15001
+main.eval_interval  = 15000
+main.log_step       = 1000
+
+main.batch_size     = 24
+main.num_rays       = 4096
+main.num_workers    = 16
+
+RayDataset.render_bkgd = 'black'
+Trainer.test_chunk_size = 4096
+
+# ------- Trainer defaults ----------
+Trainer.base_exp_dir             = "output"
+Trainer.exp_name                = None        # auto-generated
+Trainer.max_steps               = 15001
+Trainer.eval_step               = 15000
+Trainer.log_step                = 1000
+Trainer.target_sample_batch_size = 262144
+Trainer.dynamic_batch_size = False
+# TriMipRF.plane_size = 256  
+# TriMipRF.n_levels   = 8
+
+
+

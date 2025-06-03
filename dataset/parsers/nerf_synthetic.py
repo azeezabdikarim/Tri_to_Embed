@@ -21,7 +21,9 @@ def load_data(base_path: Path, scene: str, split: str):
                 else:
                     assert v == m[k]
 
-    image_height, image_width = 800, 800
+    # image_height, image_width = 800, 800
+    image_width  = int(meta.get("w",   800))   # use value if present, else fallback
+    image_height = int(meta.get("h",   800))
     camera_angle_x = float(meta["camera_angle_x"])
     focal_length = 0.5 * image_width / np.tan(0.5 * camera_angle_x)
     cx = image_width / 2.0
@@ -43,7 +45,13 @@ def load_data(base_path: Path, scene: str, split: str):
     }
     index = 0
     for frame in meta["frames"]:
-        fname = data_path / Path(frame["file_path"].replace("./", "") + ".png")
+        pure_path = frame["file_path"].replace("./", "")
+
+        if pure_path.endswith((".png", ".jpg", ".jpeg")):
+            fname = data_path / pure_path          # already has an extension
+        else:
+            fname = data_path / f"{pure_path}.png" # Blender style
+        # fname = data_path / Path(frame["file_path"].replace("./", "") + ".png")
         frames[index % cam_num].append(
             {
                 'image_filename': fname,

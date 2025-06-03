@@ -27,6 +27,17 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+output/
+output
+runs/
+weight_space/analysis_results
+a_tri_mip_embed/logs/20250602_181712
+summarize_project.py
+assets
+logs
+*summary*.txt
+weight_space/analysis_results
+*.pkl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

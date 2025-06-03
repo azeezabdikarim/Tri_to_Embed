@@ -3,12 +3,12 @@ main.num_workers = 16
 main.model_name = 'Tri-MipRF'
 main.batch_size = 24 # this is not the actual batch_size, but the prefetch size
 
-RayDataset.base_path = '/path/to/nerf_synthetic_multiscale'
+RayDataset.base_path = 'data/built_nerf_synthetic/'
 RayDataset.scene = 'chair'
 RayDataset.scene_type = 'nerf_synthetic_multiscale'
 
 
-Trainer.base_exp_dir = '/path/to/experiment/lod/dir'
+Trainer.base_exp_dir = 'output'
 Trainer.exp_name = None
 Trainer.eval_step = 25000
 Trainer.log_step = 1000

@@ -195,6 +195,16 @@ class Trainer:
         for idx, data in enumerate(tqdm(self.eval_loader)):
             metric, rb, target = self.eval_img(data)
             metrics.append(metric)
+            if save_results and "rgb" in rendering_channels:
+                gt_np   = target.rgb.cpu().numpy()
+                pred_np = rb.rgb.cpu().numpy()
+                comp_np = np.concatenate([gt_np, pred_np], axis=1)  # H × (2W) × 3
+
+                comp_path = (
+                    res_dir / "rgb" / f"{data['name']}_comparison.png"
+                )
+                data_io.imwrite(comp_np, comp_path)
+
             if save_results:
                 results["names"].append(data['name'])
                 for channel in rendering_channels:
