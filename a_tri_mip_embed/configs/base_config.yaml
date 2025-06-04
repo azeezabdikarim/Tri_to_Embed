@@ -1,38 +1,48 @@
 # Base configuration for Week 1 experiments
-experiment_name: "week1_rotation_classification"
+experiment_name: "week1_rotation_classification_attention_subtract"
 seed: 42
 
 # Data settings
 data:
-  data_root: "/home/azeez/Documents/Tri-MipRF/output/2025-05-13_12-59-05"  # Update this
+  data_root: "/home/azeez/Documents/Tri-MipRF/output/2025-05-13_12-59-05"
+  preprocessed_root: '/home/azeez/Documents/Tri-MipRF/a_tri_mip_embed/data/preprocessed_data'  # null = use ./preprocessed_features/, or specify SSD path
+  use_raw_fallback: false  # Whether to fallback to raw checkpoints if preprocessed missing
   batch_size: 8
-  num_workers: 2
+  num_workers: 4
   shuffle: true
+  train_split: 0.8
   
 # Model settings
 model:
-  encoder_type: "resnet18"  # Options: resnet18, resnet34, efficientnet
+  encoder_type: "resnet18"  # Options: resnet18, resnet34, resnet50
   embedding_dim: 256
-  plane_fusion: "concat"  # Options: concat, sum, attention
+  plane_fusion: "attention"  # Options: concat, sum, attention
   pair_combination: "subtract"  # Options: subtract, concat, both
+  pretrained: false
   
 # Training settings
 training:
   num_epochs: 100
-  learning_rate: 0.001
+  learning_rate: 0.0001
   weight_decay: 0.0001
+  label_smoothing: 0.0
   lr_scheduler:
     type: "cosine"
     warmup_epochs: 5
   
 # Logging settings
 logging:
-  log_dir: "logs"
+  log_dir: "/home/azeez/Documents/Tri-MipRF/logs/"
   save_freq: 50  # Save checkpoint every N epochs
-  log_freq: 5  # Log metrics every N steps
+  log_freq: 5   # Log metrics every N steps
   
 # Evaluation settings
 evaluation:
   eval_freq: 5  # Evaluate every N epochs
   save_embeddings: true
   save_confusion_matrix: true
+
+# Preprocessing configuration (used by preprocessing script)
+preprocessing:
+  force_rebuild: false  # Set true to rebuild all features
+  features_to_extract: ["planes"]  # Future: ["planes", "geo_mlp", "color_mlp"]

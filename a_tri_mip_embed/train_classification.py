@@ -41,6 +41,10 @@ def main():
                         help='Only run evaluation on existing checkpoint')
     parser.add_argument('--checkpoint', type=str, default=None,
                         help='Path to checkpoint for evaluation')
+    parser.add_argument('--use_fallback', action='store_true',
+                        help='Enable fallback to raw checkpoints (overrides config)')
+    parser.add_argument('--preprocessed_only', action='store_true',
+                        help='Use only preprocessed features, no fallback (overrides config)')
     args = parser.parse_args()
     
     # Load config
@@ -51,14 +55,36 @@ def main():
     if args.data_root:
         config['data']['data_root'] = args.data_root
     
+    # Override fallback setting if provided via command line
+    if args.use_fallback:
+        config['data']['use_raw_fallback'] = True
+        print("Command line override: Enabled raw checkpoint fallback")
+    elif args.preprocessed_only:
+        config['data']['use_raw_fallback'] = False
+        print("Command line override: Disabled raw checkpoint fallback (preprocessed only)")
+    
+    # Print data mode
+    if config['data'].get('use_raw_fallback', False):
+        print("Data mode: Using preprocessed features with raw checkpoint fallback")
+    else:
+        print("Data mode: Using preprocessed features only (no fallback)")
+    
     # Set seed
     set_seed(config['seed'])
     
     # Create data loaders
-    print("Creating data loaders...")
-    train_loader, val_loader = create_dataloaders(config)
-    print(f"Train samples: {len(train_loader.dataset)}")
-    print(f"Val samples: {len(val_loader.dataset)}")
+    print("\nCreating data loaders...")
+    try:
+        train_loader, val_loader = create_dataloaders(config)
+        print(f"Train samples: {len(train_loader.dataset)}")
+        print(f"Val samples: {len(val_loader.dataset)}")
+    except FileNotFoundError as e:
+        print(f"Error creating data loaders: {e}")
+        print("\nSuggestions:")
+        print("1. Run preprocessing script: python scripts/preprocess_data.py --config configs/base_config.yaml")
+        print("2. Use --use_fallback flag to enable raw checkpoint fallback")
+        print("3. Check that preprocessed_root path in config is correct")
+        return 1
     
     # Create model
     print("\nCreating model...")

@@ -87,6 +87,20 @@ class ClassificationTrainer:
             loss_dict = self.criterion(logits, labels)
             loss = loss_dict['loss']
             
+            # if batch_idx == 35:
+            #     print(f"\nBatch 35 DETAILED DEBUG:")
+            #     print(f"  Input stats - Base: [{base_planes.min():.4f}, {base_planes.max():.4f}]")
+            #     print(f"  Input stats - Aug: [{aug_planes.min():.4f}, {aug_planes.max():.4f}]")
+            #     print(f"  Raw logits: {logits[0].tolist()}")  # First sample
+            #     print(f"  Softmax probs: {torch.softmax(logits, dim=1)[0].tolist()}")  # First sample
+            #     print(f"  Label smoothing: {self.config['training'].get('label_smoothing', 0.0)}")
+            #     # Check intermediate values in the model
+            #     with torch.no_grad():
+            #         test_base_embed = self.model.encode_nerf(base_planes[:1])
+            #         test_aug_embed = self.model.encode_nerf(aug_planes[:1])
+            #         test_combined = self.model.combine_pair_embeddings(test_base_embed, test_aug_embed)
+            #         print(f"  Embed norms - Base: {test_base_embed.norm():.4f}, Aug: {test_aug_embed.norm():.4f}, Combined: {test_combined.norm():.4f}")
+
             # Backward pass
             self.optimizer.zero_grad()
             loss.backward()

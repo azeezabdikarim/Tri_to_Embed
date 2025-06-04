@@ -38,7 +38,8 @@ logs
 *summary*.txt
 weight_space/analysis_results
 *.pkl
-
+*.pt
+a_tri_mip_embed/data/preprocessed_data/planes
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
