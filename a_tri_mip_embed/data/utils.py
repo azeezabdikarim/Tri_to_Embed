@@ -32,28 +32,30 @@ def extract_planes_from_checkpoint(checkpoint_path: str) -> torch.Tensor:
         raise KeyError(f"Could not find feature maps at key '{fm_key}' in checkpoint. "
                       f"Available keys: {list(checkpoint.keys())}")
 
-def load_preprocessed_planes(
+def load_preprocessed_features(
     obj_id: str, 
     rotation: str, 
+    feature_type: str,
     preprocessed_root: Path,
     fallback_checkpoint_path: Optional[Path] = None,
     allow_fallback: bool = True
 ) -> torch.Tensor:
     """
-    Load preprocessed feature planes, with optional fallback to checkpoint extraction.
+    Load preprocessed features with hierarchical directory structure.
     
     Args:
         obj_id: Object identifier
         rotation: Rotation string
+        feature_type: Type of feature ("planes", "mlp_base", "mlp_head")
         preprocessed_root: Root directory for preprocessed features
         fallback_checkpoint_path: Fallback checkpoint path if preprocessed file missing
         allow_fallback: Whether to fallback to checkpoint extraction if preprocessed missing
         
     Returns:
-        planes: Tensor of shape (3, 512, 512, 16)
+        features: Loaded features (tensor for planes, dict for MLPs)
     """
-    # Try loading preprocessed file first
-    preprocessed_path = preprocessed_root / "planes" / f"{obj_id}_{rotation}.pt"
+    # Build path with hierarchical structure
+    preprocessed_path = preprocessed_root / obj_id / feature_type / f"{rotation}.pt"
     
     if preprocessed_path.exists():
         try:
@@ -78,16 +80,69 @@ def load_preprocessed_planes(
     
     # Fallback to checkpoint extraction if allowed
     if fallback_checkpoint_path is not None and fallback_checkpoint_path.exists():
-        print(f"Using fallback checkpoint extraction for {obj_id}/{rotation}")
-        return extract_planes_from_checkpoint(str(fallback_checkpoint_path))
+        print(f"Using fallback checkpoint extraction for {obj_id}/{rotation}/{feature_type}")
+        
+        if feature_type == "planes":
+            return extract_planes_from_checkpoint(str(fallback_checkpoint_path))
+        else:
+            # For MLPs, we need to extract and structure them
+            from .preprocessing import FeatureExtractor
+            extractor = FeatureExtractor(raw_data_root="dummy", preprocessed_root="dummy")
+            mlp_base_dict, mlp_head_dict = extractor.extract_mlp_weights_from_checkpoint(fallback_checkpoint_path)
+            
+            if feature_type == "mlp_base":
+                return mlp_base_dict
+            elif feature_type == "mlp_head":
+                return mlp_head_dict
     
     # If we get here, neither preprocessed nor checkpoint is available
     raise FileNotFoundError(
-        f"Could not find preprocessed planes at {preprocessed_path} "
+        f"Could not find preprocessed {feature_type} at {preprocessed_path} "
         f"and no valid fallback checkpoint provided. Available options:\n"
         f"1. Run preprocessing script to generate missing features\n"
         f"2. Provide valid fallback checkpoint path\n"
         f"3. Remove this object from the dataset"
+    )
+
+def load_preprocessed_planes(
+    obj_id: str, 
+    rotation: str, 
+    preprocessed_root: Path,
+    fallback_checkpoint_path: Optional[Path] = None,
+    allow_fallback: bool = True
+) -> torch.Tensor:
+    """
+    Load preprocessed feature planes - backwards compatible wrapper.
+    
+    Args:
+        obj_id: Object identifier
+        rotation: Rotation string
+        preprocessed_root: Root directory for preprocessed features
+        fallback_checkpoint_path: Fallback checkpoint path if preprocessed file missing
+        allow_fallback: Whether to fallback to checkpoint extraction if preprocessed missing
+        
+    Returns:
+        planes: Tensor of shape (3, 512, 512, 16)
+    """
+    # Check if using old flat structure
+    old_path = preprocessed_root / "planes" / f"{obj_id}_{rotation}.pt"
+    if old_path.exists():
+        # Load from old structure
+        try:
+            return torch.load(old_path, map_location='cpu')
+        except Exception as e:
+            if not allow_fallback:
+                raise
+            print(f"Warning: Failed to load from old structure: {e}")
+    
+    # Try new hierarchical structure
+    return load_preprocessed_features(
+        obj_id=obj_id,
+        rotation=rotation,
+        feature_type="planes",
+        preprocessed_root=preprocessed_root,
+        fallback_checkpoint_path=fallback_checkpoint_path,
+        allow_fallback=allow_fallback
     )
 
 def get_rotation_label(rotation_name: str) -> int:

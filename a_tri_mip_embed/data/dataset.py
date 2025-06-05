@@ -2,11 +2,12 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import random
 
 from .utils import (
     load_preprocessed_planes,
+    load_preprocessed_features,
     get_rotation_label,
     find_all_checkpoints
 )
@@ -16,12 +17,19 @@ class NeRFPairDataset(Dataset):
     Dataset that loads pairs of NeRFs (base + augmented) for rotation classification.
     
     Now uses preprocessed feature planes for faster loading.
+    Backwards compatible with existing CNN classification scripts.
     
     Always returns:
     - base_planes: The base (non-rotated) model planes
     - aug_planes: The rotated model planes
     - rotation_label: Integer label (0-4) for the rotation
     - metadata: Additional info (object_id, rotation_name)
+    
+    Optionally returns (if load_mlp_features=True):
+    - base_mlp_base: Base model's base MLP weights
+    - base_mlp_head: Base model's head MLP weights
+    - aug_mlp_base: Augmented model's base MLP weights
+    - aug_mlp_head: Augmented model's head MLP weights
     """
     
     def __init__(
@@ -30,7 +38,8 @@ class NeRFPairDataset(Dataset):
         split: str = 'train', 
         train_split: float = 0.8,
         preprocessed_root: str = None,
-        use_fallback: bool = False
+        use_fallback: bool = False,
+        load_mlp_features: bool = False
     ):
         """
         Args:
@@ -39,10 +48,12 @@ class NeRFPairDataset(Dataset):
             train_split: Fraction of objects to use for training
             preprocessed_root: Root directory for preprocessed features
             use_fallback: Whether to fallback to raw checkpoints if preprocessed missing
+            load_mlp_features: Whether to load MLP features in addition to planes
         """
         self.data_root = Path(data_root)
         self.split = split
         self.use_fallback = use_fallback
+        self.load_mlp_features = load_mlp_features
         
         # Set preprocessed root
         if preprocessed_root is None:
@@ -130,9 +141,9 @@ class NeRFPairDataset(Dataset):
         
         for obj_id, rotation in initial_pairs:
             try:
-                # Check base planes
-                base_path = self.preprocessed_root / "planes" / f"{obj_id}_base_000_000_000.pt"
-                aug_path = self.preprocessed_root / "planes" / f"{obj_id}_{rotation}.pt"
+                # Check base planes (using backwards compatible function)
+                base_path = self._get_preprocessed_path(obj_id, 'base_000_000_000', 'planes')
+                aug_path = self._get_preprocessed_path(obj_id, rotation, 'planes')
                 
                 is_corrupted = False
                 
@@ -180,66 +191,64 @@ class NeRFPairDataset(Dataset):
         if len(self.pairs) == 0:
             raise ValueError(f"No valid pairs found for {split} split! All files may be corrupted.")
 
+    def _get_preprocessed_path(self, obj_id: str, rotation: str, feature_type: str) -> Path:
+        """Get preprocessed path, checking both old and new directory structures."""
+        # Check old flat structure first (for backwards compatibility)
+        if feature_type == "planes":
+            old_path = self.preprocessed_root / "planes" / f"{obj_id}_{rotation}.pt"
+            if old_path.exists():
+                return old_path
+        
+        # New hierarchical structure
+        return self.preprocessed_root / obj_id / feature_type / f"{rotation}.pt"
+
     def _find_complete_preprocessed_objects(self, required_rotations: List[str]) -> List[str]:
         """Find objects that have all required preprocessed files."""
         complete_objects = []
         
-        if not (self.preprocessed_root / "planes").exists():
-            print(f"Warning: Preprocessed planes directory not found: {self.preprocessed_root / 'planes'}")
-            return complete_objects
-        
-        # Get all preprocessed plane files
-        plane_files = list((self.preprocessed_root / "planes").glob("*.pt"))
-        
-        # Group by object ID
-        object_files = {}
-        for file_path in plane_files:
-            # Parse filename: {obj_id}_{rotation}.pt
-            filename = file_path.stem
-            parts = filename.split('_')
+        # Check old flat structure
+        if (self.preprocessed_root / "planes").exists():
+            plane_files = list((self.preprocessed_root / "planes").glob("*.pt"))
             
-            if len(parts) >= 4:  # Ensure we have obj_id + rotation parts
-                # Find where rotation part starts (look for known rotation patterns)
-                for i in range(1, len(parts) - 2):
-                    potential_rotation = '_'.join(parts[i:])
-                    if potential_rotation in required_rotations:
-                        obj_id = '_'.join(parts[:i])
-                        if obj_id not in object_files:
-                            object_files[obj_id] = []
-                        object_files[obj_id].append(potential_rotation)
-                        break
+            # Group by object ID from old structure
+            object_files = {}
+            for file_path in plane_files:
+                # Parse filename: {obj_id}_{rotation}.pt
+                filename = file_path.stem
+                parts = filename.split('_')
+                
+                if len(parts) >= 4:  # Ensure we have obj_id + rotation parts
+                    # Find where rotation part starts (look for known rotation patterns)
+                    for i in range(1, len(parts) - 2):
+                        potential_rotation = '_'.join(parts[i:])
+                        if potential_rotation in required_rotations:
+                            obj_id = '_'.join(parts[:i])
+                            if obj_id not in object_files:
+                                object_files[obj_id] = []
+                            object_files[obj_id].append(potential_rotation)
+                            break
+            
+            # Check which objects have all required rotations
+            for obj_id, rotations in object_files.items():
+                if all(rot in rotations for rot in required_rotations):
+                    complete_objects.append(obj_id)
         
-        # Check which objects have all required rotations
-        for obj_id, rotations in object_files.items():
-            if all(rot in rotations for rot in required_rotations):
-                complete_objects.append(obj_id)
+        # Also check new hierarchical structure
+        for obj_dir in self.preprocessed_root.iterdir():
+            if obj_dir.is_dir() and obj_dir.name not in complete_objects:
+                # Check if this object has all required plane files
+                planes_dir = obj_dir / "planes"
+                if planes_dir.exists():
+                    has_all = True
+                    for rotation in required_rotations:
+                        if not (planes_dir / f"{rotation}.pt").exists():
+                            has_all = False
+                            break
+                    if has_all:
+                        complete_objects.append(obj_dir.name)
         
         print(f"Found {len(complete_objects)} objects with complete preprocessed features")
         return complete_objects
-
-    def _verify_all_preprocessed_files(self):
-        """Verify that all preprocessed files exist for the objects in this split."""
-        missing_files = []
-        required_rotations = ['base_000_000_000', 'x_180_000_000', 'y_000_180_000', 
-                            'z_000_000_120', 'z_000_000_240', 'compound_090_000_090']
-        
-        for obj_id in self.object_ids:
-            for rotation in required_rotations:
-                preprocessed_path = self.preprocessed_root / "planes" / f"{obj_id}_{rotation}.pt"
-                if not preprocessed_path.exists():
-                    missing_files.append(str(preprocessed_path))
-        
-        if missing_files:
-            print(f"Error: {len(missing_files)} preprocessed files are missing:")
-            for i, file_path in enumerate(missing_files[:10]):  # Show first 10
-                print(f"  {file_path}")
-            if len(missing_files) > 10:
-                print(f"  ... and {len(missing_files) - 10} more")
-            
-            raise FileNotFoundError(
-                f"Missing {len(missing_files)} preprocessed files. "
-                f"Please run preprocessing script or set use_fallback=True"
-            )
     
     def __len__(self) -> int:
         return len(self.pairs)
@@ -274,13 +283,69 @@ class NeRFPairDataset(Dataset):
         # Get rotation label
         rotation_label = get_rotation_label(rotation)
         
-        return {
+        # Basic return dict (backwards compatible)
+        return_dict = {
             'base_planes': base_planes.float(),
             'aug_planes': aug_planes.float(),
             'rotation_label': torch.tensor(rotation_label, dtype=torch.long),
             'object_id': obj_id,
             'rotation_name': rotation
         }
+        
+        # Optionally load MLP features
+        if self.load_mlp_features:
+            try:
+                # Load base model MLPs
+                base_mlp_base = load_preprocessed_features(
+                    obj_id=obj_id,
+                    rotation='base_000_000_000',
+                    feature_type='mlp_base',
+                    preprocessed_root=self.preprocessed_root,
+                    fallback_checkpoint_path=base_checkpoint,
+                    allow_fallback=self.use_fallback
+                )
+                
+                base_mlp_head = load_preprocessed_features(
+                    obj_id=obj_id,
+                    rotation='base_000_000_000',
+                    feature_type='mlp_head',
+                    preprocessed_root=self.preprocessed_root,
+                    fallback_checkpoint_path=base_checkpoint,
+                    allow_fallback=self.use_fallback
+                )
+                
+                # Load augmented model MLPs
+                aug_mlp_base = load_preprocessed_features(
+                    obj_id=obj_id,
+                    rotation=rotation,
+                    feature_type='mlp_base',
+                    preprocessed_root=self.preprocessed_root,
+                    fallback_checkpoint_path=aug_checkpoint,
+                    allow_fallback=self.use_fallback
+                )
+                
+                aug_mlp_head = load_preprocessed_features(
+                    obj_id=obj_id,
+                    rotation=rotation,
+                    feature_type='mlp_head',
+                    preprocessed_root=self.preprocessed_root,
+                    fallback_checkpoint_path=aug_checkpoint,
+                    allow_fallback=self.use_fallback
+                )
+                
+                # Add to return dict
+                return_dict.update({
+                    'base_mlp_base': base_mlp_base,
+                    'base_mlp_head': base_mlp_head,
+                    'aug_mlp_base': aug_mlp_base,
+                    'aug_mlp_head': aug_mlp_head
+                })
+                
+            except Exception as e:
+                print(f"Warning: Failed to load MLP features for {obj_id}/{rotation}: {e}")
+                # Continue without MLP features to maintain backwards compatibility
+        
+        return return_dict
 
 def create_dataloaders(config: dict):
     """
@@ -295,18 +360,23 @@ def create_dataloaders(config: dict):
     # Get fallback setting from config
     use_fallback = config['data'].get('use_raw_fallback', False)
     
+    # Get MLP loading setting (default False for backwards compatibility)
+    load_mlp_features = config['data'].get('load_mlp_features', False)
+    
     train_dataset = NeRFPairDataset(
         data_root=config['data']['data_root'],
         split='train',
         preprocessed_root=config['data'].get('preprocessed_root', None),
-        use_fallback=use_fallback
+        use_fallback=use_fallback,
+        load_mlp_features=load_mlp_features
     )
     
     val_dataset = NeRFPairDataset(
         data_root=config['data']['data_root'],
         split='val',
         preprocessed_root=config['data'].get('preprocessed_root', None),
-        use_fallback=use_fallback
+        use_fallback=use_fallback,
+        load_mlp_features=load_mlp_features
     )
     
     train_loader = torch.utils.data.DataLoader(
