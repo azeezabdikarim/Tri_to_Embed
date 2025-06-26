@@ -41,11 +41,19 @@ weight_space/analysis_results
 *.pt
 a_tri_mip_embed/data/preprocessed_data/planes
 a_tri_mip_embed/data/preprocessed_data
+objectron_nerf_processor/data
+/home/azeez/Documents/Tri-MipRF/objectron_nerf_processor/data/
+objectron_nerf_processor/data/
+/storage/azeez/objectron_data/data/
+experiments
+logs_rotation
+tracking
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+z_debug/
 
 # Installer logs
 pip-log.txt

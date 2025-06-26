@@ -28,6 +28,10 @@ def extract_embeddings(
     """
     model.eval()
     
+    # Check what the model expects
+    model_uses_mlp = getattr(model, 'use_mlp_features', False)
+    model_uses_planes = getattr(model, 'use_planes', True)
+    
     all_base_embeddings = []
     all_aug_embeddings = []
     all_combined_embeddings = []
@@ -40,14 +44,32 @@ def extract_embeddings(
     for batch in tqdm(dataloader, desc='Extracting embeddings'):
         if samples_processed >= max_samples:
             break
-            
-        # Move to device
-        base_planes = batch['base_planes'].to(device)
-        aug_planes = batch['aug_planes'].to(device)
+        
+        # Prepare arguments for encode_nerf based on model configuration
+        base_kwargs = {}
+        aug_kwargs = {}
+        
+        if model_uses_planes:
+            base_kwargs['planes'] = batch['base_planes'].to(device)
+            aug_kwargs['planes'] = batch['aug_planes'].to(device)
+        
+        if model_uses_mlp:
+            if 'base_mlp_base' in batch:
+                # Move MLP dictionaries to device
+                base_kwargs['mlp_base_dict'] = _move_mlp_dict_to_device(batch['base_mlp_base'], device)
+                base_kwargs['mlp_head_dict'] = _move_mlp_dict_to_device(batch['base_mlp_head'], device)
+                aug_kwargs['mlp_base_dict'] = _move_mlp_dict_to_device(batch['aug_mlp_base'], device)
+                aug_kwargs['mlp_head_dict'] = _move_mlp_dict_to_device(batch['aug_mlp_head'], device)
+            else:
+                raise ValueError(
+                    f"Model is configured to use MLP features (use_mlp_features=True) "
+                    f"but MLP features are not available in the dataset batch. "
+                    f"Available batch keys: {list(batch.keys())}"
+                )
         
         # Get embeddings
-        base_embed = model.encode_nerf(base_planes)
-        aug_embed = model.encode_nerf(aug_planes)
+        base_embed = model.encode_nerf(**base_kwargs)
+        aug_embed = model.encode_nerf(**aug_kwargs)
         combined_embed = model.combine_pair_embeddings(base_embed, aug_embed)
         
         # Store
@@ -69,6 +91,31 @@ def extract_embeddings(
         'rotation_names': all_rotation_names
     }
 
+def _move_mlp_dict_to_device(mlp_dict: dict, device: torch.device) -> dict:
+    """
+    Move all tensors in an MLP dictionary to the specified device.
+    
+    Args:
+        mlp_dict: MLP dictionary with tensors
+        device: Target device
+        
+    Returns:
+        mlp_dict: Dictionary with all tensors moved to device
+    """
+    moved_dict = {}
+    for key, value in mlp_dict.items():
+        if isinstance(value, dict):
+            # Recursively handle nested dictionaries (layer data)
+            moved_dict[key] = _move_mlp_dict_to_device(value, device)
+        elif isinstance(value, torch.Tensor):
+            # Move tensor to device
+            moved_dict[key] = value.to(device)
+        else:
+            # Keep non-tensor values as-is
+            moved_dict[key] = value
+    
+    return moved_dict
+
 def analyze_plane_importance(
     model: torch.nn.Module,
     save_dir: Path
@@ -86,8 +133,27 @@ def analyze_plane_importance(
     save_dir = Path(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     
-    # Check if model uses sum fusion
-    if hasattr(model, 'fusion') and hasattr(model.fusion, 'weights'):
+    # Check if model uses sum fusion for planes
+    if (hasattr(model, 'plane_encoder') and 
+        hasattr(model.plane_encoder, 'fusion') and 
+        hasattr(model.plane_encoder['fusion'], 'weights')):
+        weights = torch.softmax(model.plane_encoder['fusion'].weights, dim=0).cpu().numpy()
+        
+        # Create visualization
+        fig = plot_plane_importance(weights.tolist(), save_dir / 'plane_importance.png')
+        plt.close(fig)
+        
+        # Save weights
+        plane_names = ['XY', 'XZ', 'YZ']
+        results = {name: float(w) for name, w in zip(plane_names, weights)}
+        
+        print("\nPlane Importance:")
+        for name, weight in results.items():
+            print(f"  {name}: {weight:.3f}")
+        
+        return results
+    elif (hasattr(model, 'fusion') and hasattr(model.fusion, 'weights')):
+        # For backward compatibility with older models
         weights = torch.softmax(model.fusion.weights, dim=0).cpu().numpy()
         
         # Create visualization
@@ -104,7 +170,7 @@ def analyze_plane_importance(
         
         return results
     else:
-        print("Model does not use sum fusion, skipping plane importance analysis")
+        print("Model does not use sum fusion for planes, skipping plane importance analysis")
         return {}
 
 def analyze_embedding_space(

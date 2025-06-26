@@ -1,0 +1,44 @@
+seed: 42
+
+data:
+  data_root: "/home/azeez/Documents/Tri-MipRF/output"
+  preprocessed_root: "/home/azeez/Documents/Tri-MipRF/a_tri_mip_embed/data/preprocessed_data"
+  batch_size: 8
+  shuffle: true
+  num_workers: 4
+  use_raw_fallback: false
+  load_mlp_features: false
+
+model:
+  # Planes only - baseline experiment
+  use_planes: true
+  use_mlp_features: false
+  
+  # Plane encoder settings
+  encoder_type: "resnet18"
+  embedding_dim: 256
+  plane_fusion: "concat"
+  pair_combination: "subtract"
+  pretrained: false
+  
+  # MLP encoders disabled
+  mlp_encoders:
+    enabled: false
+  
+  # No fusion needed for single stream
+  fusion:
+    dropout: 0.5
+
+training:
+  num_epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 1e-4
+  label_smoothing: 0.0
+
+evaluation:
+  eval_freq: 5
+
+logging:
+  log_dir: "/home/azeez/Documents/Tri-MipRF/logs/experiments"
+  log_freq: 100
+  save_freq: 25

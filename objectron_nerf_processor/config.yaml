@@ -1,0 +1,68 @@
+# Objectron NeRF Dataset Processor Configuration
+
+# Target dataset parameters
+target_samples: 6400
+categories: 
+  - "bike"
+  - "book" 
+  - "bottle"
+  - "camera"
+  - "cereal_box"
+  - "chair"
+  - "cup"
+  - "laptop"
+  - "shoe"
+
+# Frame extraction settings
+frame_extraction:
+  target_fps: 10                    # Extract every ~5th frame from 30fps
+  min_frames: 25                   # Skip scenes with too few frames
+  max_frames: 300                  # Cap very long sequences
+  image_format: "png"
+  max_resolution: 800              # Downscale if larger than this
+  ffmpeg_quality: 2                # FFmpeg quality setting (1-31, lower=better)
+
+# Pose conversion settings
+pose_conversion:
+  coordinate_system: "opengl"      # NeRF standard (right-handed, Y-up)
+  scene_scale: "auto"              # Auto-scale based on camera trajectory  
+  normalize_scene: true            # Normalize scene to [-1, 1] bounds
+
+# Quality validation filters
+validation:
+  skip_corrupted: true             # Skip corrupted videos/files
+  min_camera_movement: 0.05        # Skip nearly-static camera sequences
+  max_processing_time: 600         # Timeout per sample (seconds)
+  verify_pose_quality: true        # Check for reasonable camera poses
+  min_scene_coverage: 0.3          # Minimum fraction of object visible
+
+# File paths
+paths:
+  output_dir: "./data/processed_scenes"     # Final NeRF scenes
+  temp_dir: "./data/temp"                   # Temporary downloads
+  tracking_dir: "./tracking"                # Progress tracking files
+
+# Google Cloud Storage settings
+objectron:
+  bucket_name: "objectron"
+  base_url: "https://storage.googleapis.com/objectron"
+  index_base_url: "https://raw.githubusercontent.com/google-research-datasets/Objectron/master/index"
+  download_timeout: 300            # Timeout per file download (seconds)
+  retry_attempts: 3                # Number of retry attempts
+  parallel_downloads: 4            # Concurrent downloads
+
+# Cleanup settings
+cleanup:
+  delete_temp_files: true          # Delete temporary files after processing
+  delete_failed_attempts: true     # Delete partial files from failed processing
+  compress_images: false           # Compress final images (reduces quality)
+
+# Logging
+log_level: "INFO"                  # DEBUG, INFO, WARNING, ERROR
+progress_update_frequency: 10      # Log progress every N samples
+
+# Processing limits
+limits:
+  max_concurrent_processes: 1      # Process samples sequentially for now
+  memory_limit_gb: 8               # Approximate memory limit
+  disk_space_buffer_gb: 10         # Minimum free disk space to maintain

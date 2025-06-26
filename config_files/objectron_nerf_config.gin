@@ -1,0 +1,27 @@
+# Objectron NeRF Training Configuration
+
+# Seed for reproducibility
+main.seed = 42
+
+# Main training parameters
+main.input_dir = "/home/azeez/Documents/Tri-MipRF/objectron_nerf_processor/data/ps_small_sample"
+main.output_dir = "/home/azeez/Documents/Tri-MipRF/data/objectron_nerfs"
+main.scene_type = "nerf_synthetic"
+main.train_split = "trainval"
+main.model_name = "Tri-MipRF"
+
+# Training iterations and evaluation
+main.iters = 15001
+main.eval_interval = 5000
+main.log_step = 1000
+
+# Batch settings (from your working config)
+main.batch_size = 24
+main.num_rays = 4096
+main.num_workers = 16
+
+# Dataset configuration
+RayDataset.render_bkgd = "black"
+
+# Trainer configuration - Only the essentials that work
+Trainer.test_chunk_size = 4096

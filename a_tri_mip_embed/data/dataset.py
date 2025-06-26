@@ -154,6 +154,7 @@ class NeRFPairDataset(Dataset):
                         if base_planes.isnan().any() or base_planes.isinf().any():
                             print(f"  Corrupted base planes: {obj_id}")
                             is_corrupted = True
+                        azeez = 0
                     except Exception as e:
                         print(f"  Error loading base {obj_id}: {e}")
                         is_corrupted = True

@@ -37,7 +37,7 @@ class ClassificationTrainer:
         self.optimizer = Adam(
             self.model.parameters(),
             lr=config['training']['learning_rate'],
-            weight_decay=config['training']['weight_decay']
+            weight_decay=float(config['training']['weight_decay'])
         )
         
         # Setup scheduler
@@ -63,6 +63,36 @@ class ClassificationTrainer:
         self.global_step = 0
         self.best_val_accuracy = 0.0
     
+    def _prepare_forward_kwargs(self, batch):
+        """Prepare forward pass arguments based on model configuration and available data."""
+        # Check what the model expects
+        model_uses_mlp = getattr(self.model, 'use_mlp_features', False)
+        model_uses_planes = getattr(self.model, 'use_planes', True)
+        
+        # Prepare arguments based on model configuration and available data
+        forward_kwargs = {}
+        
+        if model_uses_planes:
+            forward_kwargs['base_planes'] = batch['base_planes'].to(self.device)
+            forward_kwargs['aug_planes'] = batch['aug_planes'].to(self.device)
+        
+        if model_uses_mlp:
+            if 'base_mlp_base' in batch:
+                forward_kwargs['base_mlp_base'] = batch['base_mlp_base']
+                forward_kwargs['aug_mlp_base'] = batch['aug_mlp_base']
+                forward_kwargs['base_mlp_head'] = batch['base_mlp_head']
+                forward_kwargs['aug_mlp_head'] = batch['aug_mlp_head']
+            else:
+                raise ValueError(
+                    f"Model is configured to use MLP features (use_mlp_features=True) "
+                    f"but MLP features are not available in the dataset batch. "
+                    f"Please ensure your dataset is configured with load_mlp_features=True "
+                    f"or set use_mlp_features=False in your model config.\n"
+                    f"Available batch keys: {list(batch.keys())}"
+                )
+        
+        return forward_kwargs
+    
     def train_epoch(self) -> Dict[str, float]:
         """Train for one epoch."""
         self.model.train()
@@ -75,13 +105,12 @@ class ClassificationTrainer:
         pbar = tqdm(self.train_loader, desc=f'Epoch {self.epoch}')
         
         for batch_idx, batch in enumerate(pbar):
-            # Move to device
-            base_planes = batch['base_planes'].to(self.device)
-            aug_planes = batch['aug_planes'].to(self.device)
+            # Prepare forward arguments
+            forward_kwargs = self._prepare_forward_kwargs(batch)
             labels = batch['rotation_label'].to(self.device)
             
             # Forward pass
-            logits = self.model(base_planes, aug_planes)
+            logits = self.model(**forward_kwargs)
             
             # Compute loss
             loss_dict = self.criterion(logits, labels)
@@ -89,15 +118,15 @@ class ClassificationTrainer:
             
             # if batch_idx == 35:
             #     print(f"\nBatch 35 DETAILED DEBUG:")
-            #     print(f"  Input stats - Base: [{base_planes.min():.4f}, {base_planes.max():.4f}]")
-            #     print(f"  Input stats - Aug: [{aug_planes.min():.4f}, {aug_planes.max():.4f}]")
+            #     print(f"  Input stats - Base: [{forward_kwargs['base_planes'].min():.4f}, {forward_kwargs['base_planes'].max():.4f}]")
+            #     print(f"  Input stats - Aug: [{forward_kwargs['aug_planes'].min():.4f}, {forward_kwargs['aug_planes'].max():.4f}]")
             #     print(f"  Raw logits: {logits[0].tolist()}")  # First sample
             #     print(f"  Softmax probs: {torch.softmax(logits, dim=1)[0].tolist()}")  # First sample
             #     print(f"  Label smoothing: {self.config['training'].get('label_smoothing', 0.0)}")
             #     # Check intermediate values in the model
             #     with torch.no_grad():
-            #         test_base_embed = self.model.encode_nerf(base_planes[:1])
-            #         test_aug_embed = self.model.encode_nerf(aug_planes[:1])
+            #         test_base_embed = self.model.encode_nerf(**{k: v[:1] for k, v in forward_kwargs.items() if k.startswith('base_')})
+            #         test_aug_embed = self.model.encode_nerf(**{k.replace('base_', 'aug_'): v[:1] for k, v in forward_kwargs.items() if k.startswith('base_')})
             #         test_combined = self.model.combine_pair_embeddings(test_base_embed, test_aug_embed)
             #         print(f"  Embed norms - Base: {test_base_embed.norm():.4f}, Aug: {test_aug_embed.norm():.4f}, Combined: {test_combined.norm():.4f}")
 
@@ -143,13 +172,12 @@ class ClassificationTrainer:
         all_labels = []
         
         for batch in tqdm(self.val_loader, desc='Validation'):
-            # Move to device
-            base_planes = batch['base_planes'].to(self.device)
-            aug_planes = batch['aug_planes'].to(self.device)
+            # Prepare forward arguments
+            forward_kwargs = self._prepare_forward_kwargs(batch)
             labels = batch['rotation_label'].to(self.device)
             
             # Forward pass
-            logits = self.model(base_planes, aug_planes)
+            logits = self.model(**forward_kwargs)
             
             # Compute loss
             loss_dict = self.criterion(logits, labels)
