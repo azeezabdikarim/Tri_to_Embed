@@ -73,7 +73,8 @@ class FrameExtractor:
                 'frame_paths': frame_paths,
                 'frame_indices': frame_indices,
                 'video_info': video_info,
-                'total_frames_extracted': len(frame_paths)
+                'total_frames_extracted': len(frame_paths),
+                'frame_interval':extraction_params['frame_interval']
             }
             
         except Exception as e:
